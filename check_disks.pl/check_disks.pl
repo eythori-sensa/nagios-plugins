@@ -137,7 +137,7 @@ use Pod::Usage;
 use strict;
 
 my ($opt_c, $opt_w, $opt_h, $opt_i,$opt_f,$opt_s,$opt_u,$opt_H,$opt_C,$opt_v,
-    $opt_html, $opt_srvperf, $opt_r, $opt_R, $opt_inodes);
+    $opt_html, $opt_srvperf, $opt_r, $opt_t, $opt_R, $opt_inodes);
 
 $ENV{'PATH'} = "/usr/lib/nagios/plugins:/usr/lib64/nagios/plugins:/usr/local/libexec:/usr/libexec:/usr/local/nagios/libexec";
 
