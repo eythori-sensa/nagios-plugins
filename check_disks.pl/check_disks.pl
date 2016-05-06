@@ -95,6 +95,10 @@ not be used.
 
     $Log: check_disk.pl,v $
 
+    Revision 1.11 2016/05/06 10:50:00 eythori@sensa.is
+    o Add timeout option for nrpe
+    o Fix threshold parameters for values lower than 0%. Use bytes for comparison.
+
     Revision 1.10 2013/03/01 14:28:00 tryggvi@ok.is
     o Added support for inodes
 
@@ -144,6 +148,7 @@ $opt_c = "5";       # Valeur par defaut de critical
 $opt_H = "localhost";
 $opt_R = q/^$/;
 $opt_r = "";
+$opt_t = "30";
 my $cmd = "/bin/df -k";
 my $multiply = 1024; # For bytes
 
@@ -175,6 +180,7 @@ GetOptions(
         "C=s" => \$opt_C,   "conf=s"              => \$opt_C,
         "I" => \$opt_inodes,   "inodes"              => \$opt_inodes,
         "v"   => \$opt_v,   "verbose"             => \$opt_v,
+        "t=i"   => \$opt_t,   "timeout=i"             => \$opt_t,
         "r=s" => \$opt_r,   "R=s"                 => \$opt_R,
         "html"   => \$opt_html,
         "srvperf=s" => \$opt_srvperf,
@@ -213,9 +219,9 @@ if(defined($opt_inodes)){
 if($opt_H ne "localhost" and $opt_H ne "127.0.0.1") {
     #$cmd = "ssh $opt_u\@$opt_H '$cmd'";
     if(defined($opt_inodes)){
-        $cmd = "check_nrpe -H $opt_H -c get_disks_inodes";
+        $cmd = "check_nrpe -H $opt_H -t $opt_t -c get_disks_inodes";
     } else {
-        $cmd = "check_nrpe -H $opt_H -c get_disks";
+        $cmd = "check_nrpe -H $opt_H -t $opt_t -c get_disks";
     }
     #$cmd = "cat /tmp/df";
     #print "$cmd";
@@ -374,11 +380,17 @@ my $ok_disks = "";
 # Tests Warn et Crit de tous les fs et creation de l'output
 foreach my $f (keys %checkdisks) {
 	if ($opt_v) { $output .= "\n"; }
-    if($checkdisks{$f}->{pfree} < $checkdisks{$f}->{critical}) {
+
+    if($checkdisks{$f}->{free} < $checkdisks{$f}->{criticalbytes}) {
+   	$critical_disks .= " " . $f ;	
+        $cmp_crit++;
+    } elsif($checkdisks{$f}->{pfree} < $checkdisks{$f}->{critical}) {
 	$critical_disks .= " " . $f ;	
         $cmp_crit++;
-    } 
-    elsif ($checkdisks{$f}->{pfree} < $checkdisks{$f}->{warning}) {
+    } elsif ($checkdisks{$f}->{free} < $checkdisks{$f}->{warningbytes}) {
+	$warning_disks .= " " . $f ;	
+        $cmp_warn++;
+    } elsif ($checkdisks{$f}->{pfree} < $checkdisks{$f}->{warning}) {
 	$warning_disks .= " " . $f ;	
         $cmp_warn++;
     } else {
@@ -471,6 +483,30 @@ sub byte2percent {
     return $return;
 }
 
+sub human2bytes {
+    my ($value,$unit,$max) = @_;
+    my $return;
+    #Kilo Mega Giga Tera 
+    my @units = qw (K M G T);
+    if(!grep {$_ eq $unit} @units) {
+        print "Erreur : unite inconnue ($unit)\n";
+        return 0;
+    }
+
+    if($unit eq 'K') {
+        $return = sprintf("%d",($multiply*$value));
+    } elsif ($unit eq 'M') {
+        $return = sprintf("%d",($multiply*$multiply*$value));
+    } elsif ($unit eq 'G') {
+        $return = sprintf("%d",($multiply*$multiply*$multiply*$value));
+    } elsif ($unit eq 'T') {
+        $return = sprintf("%d",($multiply*$multiply*$multiply*$multiply*$value));
+    } else {
+	$return = $value;
+    }
+    return $return;
+}
+
 sub byte2human {
     my ($value) = @_;
     my $i=0;
@@ -492,12 +528,14 @@ sub updateRates {
     if($w =~ m/^(\d+)(\D)/) {
 	$alldisks{$disk}->{'warning'}=
 	    byte2percent($1,$2,$alldisks{$disk}->{somme});	
+	$alldisks{$disk}->{'warningbytes'}= human2bytes($1,$2,$alldisks{$disk}->{somme});
     } else {
         $alldisks{$disk}->{'warning'}=$w;
     }
     if($c =~ /^(\d+)(\D)/) {
         $alldisks{$disk}->{'critical'}=
 	    byte2percent($1,$2,$alldisks{$disk}->{somme});
+        $alldisks{$disk}->{'criticalbytes'}= human2bytes($1,$2,$alldisks{$disk}->{somme});
     } else {
         $alldisks{$disk}->{'critical'}=$c;
     }
